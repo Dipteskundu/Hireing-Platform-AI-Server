@@ -1,10 +1,11 @@
 // routes/skillTest.routes.js
 
-const express = require("express");
+import express from "express";
+import { generateTest, submitTest } from "../controllers/skillTestController.js";
+
 const router = express.Router();
-const { generateTest, submitTest } = require("../controllers/skillTestController");
 
 router.post("/api/skill-test/generate", generateTest);
 router.post("/api/skill-test/submit", submitTest);
 
-module.exports = router;
+export default router;

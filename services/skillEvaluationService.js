@@ -1,6 +1,4 @@
-// services/skillEvaluationService.js
-
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
@@ -74,29 +72,31 @@ async function generateWithFallback(prompt, retryCount = 0) {
 }
 
 /**
- * Evaluate candidate answers and return a total score and result.
- * @param {string} skill
- * @param {Array<{text: string, difficulty: string}>} questions
- * @param {Array<{questionId: string, answer: string}>} answers
+ * Evaluate candidate answers across multiple skills (up to 9 questions total)
  */
-async function evaluateSkillAnswers(skill, questions, answers) {
+async function evaluateSkillAnswers(skillsArray, questions, answers) {
+  const skillsList = Array.isArray(skillsArray) ? skillsArray.join(", ") : skillsArray;
+
   const qaPairs = questions.map((q) => {
     const ans = answers.find((a) => a.questionId === q.id);
     return {
+      skill: q.skill || "Unknown",
       difficulty: q.difficulty,
       question: q.text,
       answer: ans?.answer || "(No answer provided)"
     };
   });
 
-  const prompt = `You are a Senior ${skill} Engineer assessing a candidate's skill verification test.
-There are 3 questions (Simple, Medium, Hard).
+  const questionCount = questions.length;
+  const marksPerQuestion = (100 / questionCount).toFixed(2);
+
+  const prompt = `You are a Senior Software Engineer assessing a candidate's skill verification test.
+The test covers these skills: ${skillsList}.
+There are ${questionCount} questions.
 Evaluate the candidate's answers based on correctness, deep understanding, and clear explanations.
 
 Assign a score out of 100 for the ENTIRE test.
-Question 1 = 33.33 marks
-Question 2 = 33.33 marks
-Question 3 = 33.33 marks
+Each question is worth approximately ${marksPerQuestion} marks.
 
 If an answer is completely correct and shows good understanding, give full marks for that question.
 If partially correct, give partial marks.
@@ -106,7 +106,7 @@ Calculate the total score out of 100.
 Return ONLY a valid JSON object in this exact format:
 {
   "score": 75,
-  "feedback": "Good understanding of basics, but struggled with the advanced concept in question 3."
+  "feedback": "Good understanding of React basics, but struggled with the advanced Node.js concept in question 5."
 }
 
 Questions and candidate answers:
@@ -141,6 +141,5 @@ Return ONLY the single JSON object, no markdown, no extra text.`;
   }
 }
 
-module.exports = {
-  evaluateSkillAnswers
-};
+export { evaluateSkillAnswers };
+export default { evaluateSkillAnswers };

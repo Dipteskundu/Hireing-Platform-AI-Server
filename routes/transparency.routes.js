@@ -1,10 +1,11 @@
 // routes/transparency.routes.js
 // Transparency Engine: Fit Map, Live Pulse, Gap-to-Growth, Notifications
 
-const express = require("express");
+import express from "express";
+import { ObjectId } from "mongodb";
+import { getDB } from "../config/db.js";
+
 const router = express.Router();
-const { ObjectId } = require("mongodb");
-const { getDB } = require("../config/db");
 
 // ─────────────────────────────────────────────────────────────
 // ENGINE 1 – FIT INTELLIGENCE
@@ -368,4 +369,4 @@ router.patch("/api/notifications/read-all/:uid", async (req, res) => {
 });
 
 
-module.exports = router;
+export default router;

@@ -1,10 +1,8 @@
 // backend/list-models.js
 // Script to list all available Gemini models for your API key
 
-const dotenv = require("dotenv");
-const https = require("https");
-
-dotenv.config();
+import "dotenv/config";
+import https from "https";
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 

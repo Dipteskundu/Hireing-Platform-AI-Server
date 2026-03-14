@@ -1,7 +1,7 @@
 // services/aiSkillExtractionService.js
 // Service to extract skills and experience from resume text using Gemini AI
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
@@ -134,6 +134,4 @@ ${resumeText.substring(0, 15000)} /* Truncate to avoid exceeding token limits if
   }
 }
 
-module.exports = {
-  extractSkillsFromResume
-};
+export { extractSkillsFromResume };

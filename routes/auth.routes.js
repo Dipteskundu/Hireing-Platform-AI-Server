@@ -1,9 +1,10 @@
 // routes/auth.routes.js
 // Sync authenticated Firebase user into MongoDB "users" collection
 
-const express = require("express");
+import express from "express";
+import { getDB } from "../config/db.js";
+
 const router = express.Router();
-const { getDB } = require("../config/db");
 
 // POST /api/auth/sync-user
 // Called from frontend AFTER Firebase login/register succeeds.
@@ -171,5 +172,5 @@ router.put("/api/auth/profile/:uid", async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
 

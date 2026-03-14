@@ -1,6 +1,6 @@
 // services/aiQuestionService.js
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
@@ -81,26 +81,27 @@ async function generateWithFallback(prompt, retryCount = 0) {
 }
 
 /**
- * Generate 3 technical interview questions for a given skill
+ * Generate technical interview questions for up to 3 skills (3 per skill)
  */
-async function generateSkillQuestions(skill) {
-  const prompt = `Generate 3 technical interview questions about ${skill}.
+async function generateSkillQuestions(skillsArray) {
+  const skills = Array.isArray(skillsArray) ? skillsArray.slice(0, 3) : [skillsArray];
+  if (skills.length === 0) throw new Error("At least one skill is required");
+  const skillsList = skills.join(", ");
+
+  const prompt = `Generate technical interview questions for the following skills: ${skillsList}.
 
 Requirements:
-- Use very simple English
-- Test deep understanding
-- Include:
-  1 simple
-  1 medium
-  1 hard question
-- Keep questions short
-- Return ONLY a valid JSON array. Each object must have: "id" (string), "text" (string), "difficulty" (string - "Simple", "Medium", "Hard").
+- For EACH skill, generate exactly 3 questions (1 simple, 1 medium, 1 hard).
+- Total questions should be exactly ${skills.length * 3}.
+- Use very simple English.
+- Test deep understanding.
+- Keep questions short.
+- Return ONLY a valid JSON array. Each object must have: "id" (string), "text" (string), "difficulty" (string - "Simple", "Medium", "Hard"), and "skill" (string - the skill it belongs to).
 
 Example JSON format:
 [
-  {"id": "q1", "text": "What is the purpose of a React component?", "difficulty": "Simple"},
-  {"id": "q2", "text": "Why do we use useEffect in React applications?", "difficulty": "Medium"},
-  {"id": "q3", "text": "Explain how React decides which parts of the UI need to re-render.", "difficulty": "Hard"}
+  {"id": "q1", "text": "What is the purpose of a React component?", "difficulty": "Simple", "skill": "React"},
+  {"id": "q2", "text": "Why do we use useEffect in React applications?", "difficulty": "Medium", "skill": "React"}
 ]
 
 Return ONLY the JSON array, no markdown, no extra text.`;
@@ -114,13 +115,14 @@ Return ONLY the JSON array, no markdown, no extra text.`;
 
   try {
     const questions = JSON.parse(jsonStr);
-    if (!Array.isArray(questions) || questions.length !== 3) {
+    if (!Array.isArray(questions)) {
       throw new Error("Invalid question format from AI");
     }
     return questions.map((q, i) => ({
       id: q.id || `q${i + 1}`,
       text: q.text || "",
-      difficulty: q.difficulty || ["Simple", "Medium", "Hard"][i] || "Medium",
+      difficulty: q.difficulty || "Medium",
+      skill: q.skill || skills[0]
     }));
   } catch (error) {
     console.error("Failed to parse Skill Questions JSON", error);
@@ -128,6 +130,4 @@ Return ONLY the JSON array, no markdown, no extra text.`;
   }
 }
 
-module.exports = {
-  generateSkillQuestions
-};
+export { generateSkillQuestions };

@@ -1,18 +1,14 @@
 // routes/jobs.routes.js
 // Handles job-related API routes
 
-const express = require("express");
-const router = express.Router();
-const { ObjectId } = require("mongodb");
-const { getDB } = require("../config/db");
-const { analyzeSkillGap } = require("../services/skillGapService");
+import express from "express";
+import { ObjectId } from "mongodb";
+import { getDB } from "../config/db.js";
+import { analyzeSkillGap } from "../services/skillGapService.js";
+import { getFirebaseService } from "../services/firebaseService.js";
 
-let firebaseService = null;
-try {
-  firebaseService = require("../services/firebaseService");
-} catch (e) {
-  console.warn("Firebase service not loaded (firebase-admin might not be installed)");
-}
+const router = express.Router();
+const firebaseService = getFirebaseService();
 
 
 
@@ -506,4 +502,4 @@ router.delete("/api/jobs/saved/:id", async (req, res) => {
 });
 
 
-module.exports = router;
+export default router;

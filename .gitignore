@@ -1,3 +1,5 @@
 .env
 /node_modules
 firebase-admin-SDK.json
+jobmatching-firebase-adminsdk-.json
+.vercel

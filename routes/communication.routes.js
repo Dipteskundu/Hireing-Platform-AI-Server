@@ -1,13 +1,14 @@
 // routes/communication.routes.js
 
-const express = require("express");
-const router = express.Router();
-const {
+import express from "express";
+import {
   startTest,
   submitTest,
   getResult,
   getSession,
-} = require("../controllers/communication.controller");
+} from "../controllers/communication.controller.js";
+
+const router = express.Router();
 
 // POST /api/communication/start
 router.post("/api/communication/start", startTest);
@@ -21,4 +22,4 @@ router.post("/api/communication/submit", submitTest);
 // GET /api/communication/result/:sessionId
 router.get("/api/communication/result/:sessionId", getResult);
 
-module.exports = router;
+export default router;

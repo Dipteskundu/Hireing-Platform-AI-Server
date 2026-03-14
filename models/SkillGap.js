@@ -19,6 +19,4 @@
 
 const COLLECTION = "skillGaps";
 
-module.exports = {
-  COLLECTION,
-};
+export { COLLECTION };

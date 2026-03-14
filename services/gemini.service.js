@@ -3,7 +3,7 @@
 // Using the official Google Generative AI SDK (@google/generative-ai)
 // Documentation: https://ai.google.dev/gemini-api/docs/get-started/node
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 if (!apiKey) {
@@ -249,7 +249,7 @@ Return ONLY the single JSON object, no markdown, no extra text, no arrays.`;
   return scores;
 }
 
-module.exports = {
+export {
   generateQuestions,
   evaluateAnswers,
   TIME_LIMIT_MINUTES,

@@ -1,8 +1,8 @@
 // controllers/resumeController.js
 
-const { getDB } = require("../config/db");
-const { extractTextFromResume } = require("../services/resumeParserService");
-const { extractSkillsFromResume } = require("../services/aiSkillExtractionService");
+import { getDB } from "../config/db.js";
+import { extractTextFromResume } from "../services/resumeParserService.js";
+import { extractSkillsFromResume } from "../services/aiSkillExtractionService.js";
 
 /**
  * Handle resume upload, parsing, AI extraction, and DB updates.
@@ -93,6 +93,4 @@ async function uploadResume(req, res) {
   }
 }
 
-module.exports = {
-  uploadResume
-};
+export { uploadResume };

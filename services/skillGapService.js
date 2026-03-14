@@ -1,7 +1,7 @@
 // services/skillGapService.js
 // Compares candidate skills with job skills and generates AI learning suggestions
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
@@ -149,6 +149,4 @@ Example format:
   };
 }
 
-module.exports = {
-  analyzeSkillGap
-};
+export { analyzeSkillGap };

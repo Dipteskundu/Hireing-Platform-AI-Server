@@ -1,9 +1,10 @@
 // routes/companies.routes.js
 // Handles company-related API routes
 
-const express = require("express");
+import express from "express";
+import { getDB } from "../config/db.js";
+
 const router = express.Router();
-const { getDB } = require("../config/db");
 
 
 async function getAllCompaniesHandler(req, res) {
@@ -143,4 +144,4 @@ router.post("/api/v1/companies/:id/follow", async (req, res) => {
 });
 
 
-module.exports = router;
+export default router;

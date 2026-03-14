@@ -1,9 +1,9 @@
 // controllers/communication.controller.js
 
-const { ObjectId } = require("mongodb");
-const { getDB } = require("../config/db");
-const { generateQuestions, evaluateAnswers } = require("../services/gemini.service");
-const { STATUS, COLLECTION } = require("../models/communicationTest.model");
+import { ObjectId } from "mongodb";
+import { getDB } from "../config/db.js";
+import { generateQuestions, evaluateAnswers } from "../services/gemini.service.js";
+import { STATUS, COLLECTION } from "../models/communicationTest.model.js";
 
 /**
  * POST /api/communication/start
@@ -299,9 +299,4 @@ async function getSession(req, res) {
   }
 }
 
-module.exports = {
-  startTest,
-  submitTest,
-  getResult,
-  getSession,
-};
+export { startTest, submitTest, getResult, getSession };

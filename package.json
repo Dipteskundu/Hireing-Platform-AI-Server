@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "Beginner friendly Node.js/Express backend with MongoDB",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
+  },
+  "engines": {
+    "node": "18.x"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

@@ -1,30 +1,33 @@
 // controllers/skillTestController.js
 
-const { getDB } = require("../config/db");
-const { generateSkillQuestions } = require("../services/aiQuestionService");
-const { evaluateSkillAnswers } = require("../services/skillEvaluationService");
-const { ObjectId } = require("mongodb");
+import { ObjectId } from "mongodb";
+import { getDB } from "../config/db.js";
+import { generateSkillQuestions } from "../services/aiQuestionService.js";
+import skillEvaluationService from "../services/skillEvaluationService.js";
 
 /**
  * Generate a new skill test
  * POST /api/skill-test/generate
- * Body: { candidateId: string, skill: string }
+ * Body: { candidateId: string, skills: string[] }
  */
 const generateTest = async (req, res) => {
   try {
-    const { candidateId, skill } = req.body;
-    if (!candidateId || !skill) {
-      return res.status(400).json({ success: false, message: "candidateId and skill are required" });
+    const { candidateId, skill, skills: reqSkills } = req.body;
+    let skills = reqSkills;
+    if (!skills && skill) skills = [skill];
+
+    if (!candidateId || !skills || !Array.isArray(skills) || skills.length === 0) {
+      return res.status(400).json({ success: false, message: "candidateId and skills array are required" });
     }
 
-    const questions = await generateSkillQuestions(skill);
+    const questions = await generateSkillQuestions(skills);
 
     const db = getDB();
     const tests = db.collection("skill_tests");
 
     const newTest = {
       candidateId,
-      skill,
+      skills,
       questions,
       answers: [],
       score: null,
@@ -38,7 +41,7 @@ const generateTest = async (req, res) => {
       success: true,
       data: {
         testId: result.insertedId,
-        skill,
+        skills,
         questions,
       },
     });
@@ -75,7 +78,8 @@ const submitTest = async (req, res) => {
     }
 
     // Evaluate answers
-    const evaluation = await evaluateSkillAnswers(test.skill, test.questions, answers);
+    const { evaluateSkillAnswers } = skillEvaluationService;
+    const evaluation = await evaluateSkillAnswers(test.skills, test.questions, answers);
 
     const isPass = evaluation.passed;
     const finalResult = isPass ? "pass" : "fail";
@@ -105,9 +109,11 @@ const submitTest = async (req, res) => {
     let updateFields = {};
 
     if (isPass) {
-      if (!verifiedSkills.includes(test.skill)) {
-        verifiedSkills.push(test.skill);
-      }
+      test.skills.forEach(ts => {
+        if (!verifiedSkills.includes(ts)) {
+          verifiedSkills.push(ts);
+        }
+      });
       
       const allSkills = Array.isArray(user.skills) ? user.skills : [];
       // Check if all declared skills are now verified
@@ -151,7 +157,4 @@ const submitTest = async (req, res) => {
   }
 };
 
-module.exports = {
-  generateTest,
-  submitTest,
-};
+export { generateTest, submitTest };

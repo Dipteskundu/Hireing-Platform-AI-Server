@@ -1,7 +1,8 @@
-const express = require("express");
+import express from "express";
+import { ObjectId } from "mongodb";
+import { getDB } from "../config/db.js";
+
 const router = express.Router();
-const { ObjectId } = require("mongodb");
-const { getDB } = require("../config/db");
 
 // --- Candidate Dashboard ---
 router.get("/api/dashboard/candidate/:uid", async (req, res) => {
@@ -251,7 +252,7 @@ router.get("/api/applications/:id", async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;
 
 
 // Helper function to calculate profile completion

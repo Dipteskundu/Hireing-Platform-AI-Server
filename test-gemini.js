@@ -3,11 +3,8 @@
 // Using the official Google Generative AI SDK (@google/generative-ai)
 // Documentation: https://ai.google.dev/gemini-api/docs/get-started/node
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const dotenv = require("dotenv");
-
-// Load .env
-dotenv.config();
+import "dotenv/config";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 

@@ -1,12 +1,13 @@
 // backend/test-service.js
 // Comprehensive test for the Gemini service functions
 
-// Load environment variables FIRST before requiring the service
-const dotenv = require("dotenv");
-dotenv.config();
-
-// Now require the service after env vars are loaded
-const { generateQuestions, evaluateAnswers, TIME_LIMIT_MINUTES, QUESTION_COUNT } = require("./services/gemini.service");
+import "dotenv/config";
+import {
+  generateQuestions,
+  evaluateAnswers,
+  TIME_LIMIT_MINUTES,
+  QUESTION_COUNT,
+} from "./services/gemini.service.js";
 
 async function testGenerateQuestions() {
     console.log("\n" + "=".repeat(60));

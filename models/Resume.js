@@ -23,6 +23,4 @@
 
 const COLLECTION = "resumes";
 
-module.exports = {
-  COLLECTION,
-};
+export { COLLECTION };

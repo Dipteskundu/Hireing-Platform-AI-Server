@@ -1,15 +1,18 @@
 // routes/resume.routes.js
 
-const express = require("express");
-const router = express.Router();
-const multer = require("multer");
-const { uploadResume } = require("../controllers/resumeController");
+import express from "express";
+import multer from "multer";
+import { uploadResume } from "../controllers/resumeController.js";
 
-// Configure multer for temp storage (could be customized to save to a specific folder or S3)
-const upload = multer({ dest: 'uploads/' });
+const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 // POST /api/resume/upload
 // Expects multipart/form-data with a file field named 'resume' and a text field 'candidateId'
 router.post("/api/resume/upload", upload.single("resume"), uploadResume);
 
-module.exports = router;
+export default router;

@@ -30,7 +30,4 @@ const STATUS = {
 
 const COLLECTION = "communicationTests";
 
-module.exports = {
-  STATUS,
-  COLLECTION,
-};
+export { STATUS, COLLECTION };

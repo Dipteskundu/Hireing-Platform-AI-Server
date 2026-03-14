@@ -1,8 +1,8 @@
 // controllers/skillGapController.js
 
-const { ObjectId } = require("mongodb");
-const { getDB } = require("../config/db");
-const { analyzeSkillGap } = require("../services/skillGapService");
+import { ObjectId } from "mongodb";
+import { getDB } from "../config/db.js";
+import { analyzeSkillGap } from "../services/skillGapService.js";
 
 /**
  * Controller to handle skill gap analysis before applying to a job.
@@ -70,6 +70,4 @@ const getSkillGapAnalysis = async (req, res) => {
   }
 };
 
-module.exports = {
-  getSkillGapAnalysis,
-};
+export { getSkillGapAnalysis };

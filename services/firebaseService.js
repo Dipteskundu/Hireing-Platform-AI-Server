@@ -1,72 +1,78 @@
-const admin = require('firebase-admin');
+import admin from "firebase-admin";
+import { loadEnv } from "../config/env.js";
 
-let serviceAccount = null;
-if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-    console.warn('Firebase service not loaded: FIREBASE_SERVICE_ACCOUNT is not set');
-} else {
-    try {
-        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    } catch (error) {
-        console.warn('Firebase service not loaded: FIREBASE_SERVICE_ACCOUNT is invalid JSON');
-    }
+const globalCache = globalThis.__firebaseService || {
+  service: null,
+};
+
+globalThis.__firebaseService = globalCache;
+
+function buildDatabaseUrl(serviceAccount) {
+  const projectId = serviceAccount?.project_id;
+  if (!projectId) return null;
+  return `https://${projectId}-default-rtdb.firebaseio.com`;
 }
 
-if (!serviceAccount) {
-    module.exports = null;
-} else {
-    // Initialize Firebase Admin if it hasn't been initialized yet
-    if (!admin.apps.length) {
-        admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount),
-            // Standard Firebase Realtime Database URL format based on project ID
-            databaseURL: `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`
-        });
-    }
+export function getFirebaseService() {
+  if (globalCache.service) return globalCache.service;
 
-    const db = admin.database();
+  const { env, firebaseErrors } = loadEnv();
+  const hasFirebaseError = firebaseErrors.some((e) =>
+    e.includes("FIREBASE_SERVICE_ACCOUNT")
+  );
 
-/**
- * Send a real-time notification to a specific user
- * @param {string} userId - Firebase UID of the candidate or recruiter
- * @param {object} notification - Notification data (title, message, type, jobId, etc)
- */
-async function sendNotification(userId, notification) {
+  if (hasFirebaseError) {
+    console.error("Firebase Admin disabled due to invalid FIREBASE_SERVICE_ACCOUNT.");
+    return null;
+  }
+
+  if (!env.FIREBASE_SERVICE_ACCOUNT) {
+    console.warn("Firebase Admin disabled: FIREBASE_SERVICE_ACCOUNT not set.");
+    return null;
+  }
+
+  if (!admin.apps.length) {
+    const databaseURL = buildDatabaseUrl(env.FIREBASE_SERVICE_ACCOUNT);
+    admin.initializeApp({
+      credential: admin.credential.cert(env.FIREBASE_SERVICE_ACCOUNT),
+      ...(databaseURL ? { databaseURL } : {}),
+    });
+  }
+
+  const db = admin.database();
+
+  async function sendNotification(userId, notification) {
     try {
-        // Push generates a unique ID for the notification
-        const ref = db.ref(`notifications/${userId}`).push();
-        const fullNotification = {
-            id: ref.key,
-            ...notification,
-            // Use server timestamp so times match the DB server
-            createdAt: admin.database.ServerValue.TIMESTAMP,
-            read: false,
-        };
-        await ref.set(fullNotification);
-        console.log(`Real-time notification sent to user ${userId}`);
+      const ref = db.ref(`notifications/${userId}`).push();
+      const fullNotification = {
+        id: ref.key,
+        ...notification,
+        createdAt: admin.database.ServerValue.TIMESTAMP,
+        read: false,
+      };
+      await ref.set(fullNotification);
+      console.log(`Real-time notification sent to user ${userId}`);
     } catch (error) {
-        console.error("Firebase sendNotification error:", error);
+      console.error("Firebase sendNotification error:", error);
     }
-}
+  }
 
-/**
- * Update the real-time applicant count for a job
- * @param {string} jobId - ID of the job
- * @param {number} count - The current total count of applicants
- */
-async function updateApplicantCount(jobId, count) {
+  async function updateApplicantCount(jobId, count) {
     try {
-        const ref = db.ref(`jobApplicants/${jobId}`);
-        await ref.set({ count });
-        console.log(`Updated applicant count for job ${jobId} to ${count}`);
+      const ref = db.ref(`jobApplicants/${jobId}`);
+      await ref.set({ count });
+      console.log(`Updated applicant count for job ${jobId} to ${count}`);
     } catch (error) {
-        console.error("Firebase updateApplicantCount error:", error);
+      console.error("Firebase updateApplicantCount error:", error);
     }
-}
+  }
 
-    module.exports = {
-        admin,
-        db,
-        sendNotification,
-        updateApplicantCount
-    };
+  globalCache.service = {
+    admin,
+    db,
+    sendNotification,
+    updateApplicantCount,
+  };
+
+  return globalCache.service;
 }

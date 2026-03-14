@@ -1,49 +1,52 @@
 // config/db.js
-// Simple MongoDB connection using the native driver
+// MongoDB connection with serverless-friendly caching
 
-const { MongoClient } = require('mongodb');
-const dotenv = require('dotenv');
+import { MongoClient } from "mongodb";
+import { loadEnv } from "./env.js";
 
-dotenv.config(); // load .env values
+const globalCache = globalThis.__mongoCache || {
+  client: null,
+  db: null,
+  promise: null,
+};
 
-const uri = process.env.MONGO_URI;
-if (!uri) {
-  throw new Error('MONGO_URI must be set in .env');
-}
+globalThis.__mongoCache = globalCache;
 
-// Explicit database name (matches your MongoDB database)
-const dbName = process.env.MONGO_DB_NAME || 'skillmatchai';
-
-// create a client instance - not connected yet
-// mongodb@5+ no longer needs useUnifiedTopology
-const client = new MongoClient(uri);
-let dbInstance = null;
-
-// connect to the database and cache the instance
 async function connectDB() {
-  if (dbInstance) {
-    return dbInstance;
+  const { env } = loadEnv();
+  const uri = env.MONGODB_URI;
+  const dbName = env.MONGO_DB_NAME;
+
+  if (!uri) {
+    throw new Error("MONGODB_URI is missing. Configure it in your environment variables.");
   }
 
-  try {
-    await client.connect();
-    dbInstance = client.db(dbName);
-    // console.log(`Connected to MongoDB database: ${dbName}`);
-    return dbInstance;
-  } catch (error) {
-    console.error('Error connecting to MongoDB:', error.message);
-    throw error;
+  if (globalCache.db) return globalCache.db;
+
+  if (!globalCache.promise) {
+    const client = new MongoClient(uri);
+    globalCache.client = client;
+    globalCache.promise = client
+      .connect()
+      .then(() => {
+        globalCache.db = client.db(dbName);
+        return globalCache.db;
+      })
+      .catch((error) => {
+        globalCache.promise = null;
+        console.error("Error connecting to MongoDB:", error.message);
+        throw error;
+      });
   }
+
+  return globalCache.promise;
 }
 
 function getDB() {
-  if (!dbInstance) {
-    throw new Error('Database not initialized. Call connectDB() first.');
+  if (!globalCache.db) {
+    throw new Error("Database not initialized. Call connectDB() first.");
   }
-  return dbInstance;
+  return globalCache.db;
 }
 
-module.exports = {
-  connectDB,
-  getDB,
-};
+export { connectDB, getDB };
