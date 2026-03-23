@@ -4,8 +4,7 @@
 import express from "express";
 import { ObjectId } from "mongodb";
 import { getDB } from "../config/db.js";
-import { mockCompanies } from "../data/mockData.js";
-import { followRuntimeCompany } from "../services/runtimeStore.js";
+import adminGate from "../middleware/adminGate.js";
 
 const router = express.Router();
 
@@ -46,11 +45,8 @@ async function getAllCompaniesHandler(req, res) {
 
 // GET: Get All Companies
 // ===============================
-// Support /api/v1/companies, /api/companies, and /companies for compatibility
-router.get(
-  ["/api/v1/companies", "/api/companies", "/companies"],
-  getAllCompaniesHandler,
-);
+router.get("/api/v1/companies", getAllCompaniesHandler);
+router.get("/api/companies", getAllCompaniesHandler);
 
 async function createCompanyHandler(req, res) {
   try {
@@ -114,47 +110,6 @@ async function createCompanyHandler(req, res) {
 router.post("/api/v1/companies", createCompanyHandler);
 router.post("/api/companies", createCompanyHandler);
 
-async function deleteCompanyHandler(req, res) {
-  try {
-    const db = getDB();
-    const { id } = req.params;
-
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid company ID format",
-      });
-    }
-
-    const result = await db
-      .collection("companies_info")
-      .deleteOne({ _id: new ObjectId(id) });
-
-    if (!result.deletedCount) {
-      return res.status(404).json({
-        success: false,
-        message: "Company not found",
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: "Company deleted successfully",
-    });
-  } catch (error) {
-    console.error("DELETE Company Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error while deleting company",
-    });
-  }
-}
-
-// DELETE: Remove Company
-// ===============================
-router.delete("/api/v1/companies/:id", deleteCompanyHandler);
-router.delete("/api/companies/:id", deleteCompanyHandler);
-
 // POST: Follow a Company
 // ===============================
 router.post("/api/v1/companies/:id/follow", async (req, res) => {
@@ -214,6 +169,39 @@ router.post("/api/v1/companies/:id/follow", async (req, res) => {
       success: false,
       message: "Server error while following company",
     });
+  }
+});
+
+// DELETE: Delete Company By ID (Admin only)
+// =======================================
+router.delete("/api/companies/:id", adminGate, async (req, res) => {
+  try {
+    const db = getDB();
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid company ID" });
+    }
+
+    const result = await db
+      .collection("companies_info")
+      .deleteOne({ _id: new ObjectId(id) });
+    if (result.deletedCount === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Company not found" });
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: "Company deleted successfully" });
+  } catch (err) {
+    console.error("DELETE Company Error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error while deleting company" });
   }
 });
 

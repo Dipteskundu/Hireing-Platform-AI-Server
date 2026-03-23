@@ -4,7 +4,7 @@
 import express from "express";
 import { ObjectId } from "mongodb";
 import { getDB } from "../config/db.js";
-import { mockJobs } from "../data/mockData.js";
+import adminGate from "../middleware/adminGate.js";
 import { analyzeSkillGap } from "../services/skillGapService.js";
 import { getFirebaseService } from "../services/firebaseService.js";
 import { getRuntimeSavedJobs, saveRuntimeJob } from "../services/runtimeStore.js";
@@ -160,75 +160,6 @@ router.post("/api/jobs", async (req, res) => {
   }
 });
 
-// POST: Recruiter Job Request (Admin Approval Flow)
-// =======================================
-router.post("/api/jobs/request", async (req, res) => {
-  try {
-    const db = getDB();
-
-    const {
-      title,
-      company,
-      companyName,
-      location,
-      salary,
-      salaryRange,
-      experienceLevel,
-      employmentType,
-      description,
-      skills,
-      recruiterEmail,
-      recruiterUid,
-    } = req.body || {};
-
-    if (!title || !(company || companyName) || !location) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide title, company, and location",
-      });
-    }
-
-    const finalCompany = companyName || company;
-    const normalizedSkills = Array.isArray(skills)
-      ? skills.filter(Boolean)
-      : [];
-
-    const requestDoc = {
-      title,
-      companyName: finalCompany,
-      location,
-      salary: salary || salaryRange || "",
-      description: description || "",
-      skills: normalizedSkills,
-      experienceLevel: experienceLevel || "",
-      employmentType: employmentType || "Full-time",
-      recruiterEmail: recruiterEmail || "",
-      recruiterUid: recruiterUid || "",
-      status: "pending",
-      requestedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const result = await db.collection("jobRequests").insertOne(requestDoc);
-
-    return res.status(201).json({
-      success: true,
-      message: "Job request submitted for admin approval",
-      data: {
-        _id: result.insertedId,
-        ...requestDoc,
-      },
-    });
-  } catch (error) {
-    console.error("POST Job Request Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error while submitting job request",
-    });
-  }
-});
-
 // GET: Get Single Job By ID
 // =======================================
 router.get("/api/jobs/:id", async (req, res) => {
@@ -289,7 +220,7 @@ router.get("/api/jobs/:id", async (req, res) => {
 
 // DELETE: Delete Job By ID
 // =======================================
-router.delete("/api/jobs/:id", async (req, res) => {
+router.delete("/api/jobs/:id", adminGate, async (req, res) => {
   try {
     const db = getDB();
     const { id } = req.params;
@@ -635,6 +566,98 @@ router.delete("/api/jobs/saved/:id", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while unsaving job",
+    });
+  }
+});
+
+// POST: Request Job (for recruiter approval)
+// =======================================
+router.post("/api/jobs/request", async (req, res) => {
+  console.log("POST /api/jobs/request called");
+  try {
+    const db = getDB();
+    console.log("Database connected");
+
+    // 1️⃣ Extract fields from body
+    const {
+      title,
+      company,
+      location,
+      salary,
+      skills,
+      salaryRange,
+      experienceLevel,
+      employmentType,
+      posted,
+      recruiterEmail,
+      recruiterUid,
+    } = req.body;
+
+    console.log("Request body:", {
+      title,
+      company,
+      location,
+      recruiterEmail,
+      recruiterUid,
+    });
+
+    // 2️⃣ Basic validation
+    if (!title || !company || !location || !recruiterEmail || !recruiterUid) {
+      console.log("Validation failed");
+      return res.status(400).json({
+        success: false,
+        message:
+          "Please provide title, company, location, recruiter email and UID",
+      });
+    }
+
+    // 3️⃣ Get recruiter info for proper job association
+    console.log("Fetching recruiter info...");
+    const recruiter = await db
+      .collection("users")
+      .findOne({ firebaseUid: recruiterUid });
+    const recruiterName = recruiter?.displayName || recruiterEmail;
+    const recruiterCompany = recruiter?.companyName || company;
+    console.log("Recruiter found:", !!recruiter);
+
+    // 4️⃣ Create job request object
+    const jobRequest = {
+      title,
+      company: recruiterCompany, // Use recruiter's company name
+      location,
+      salary: salary || "",
+      skills: skills || [],
+      salaryRange: salaryRange || "",
+      experienceLevel: experienceLevel || "",
+      employmentType: employmentType || "",
+      posted: posted || "",
+      recruiterEmail,
+      recruiterUid,
+      recruiterName, // Add recruiter name for better tracking
+      status: "pending", // pending admin approval
+      createdAt: new Date(),
+    };
+
+    console.log("Inserting job...");
+    // 5️⃣ Insert into database
+    const result = await db.collection("find_jobs").insertOne(jobRequest);
+    console.log("Job inserted:", result.insertedId);
+
+    // 6️⃣ Send response
+    res.status(201).json({
+      success: true,
+      message: "Job request submitted for admin approval",
+      data: {
+        _id: result.insertedId,
+        ...jobRequest,
+      },
+    });
+  } catch (error) {
+    console.error("POST Job Request Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error while submitting job request",
     });
   }
 });
