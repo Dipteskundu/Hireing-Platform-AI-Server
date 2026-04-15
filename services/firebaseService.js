@@ -1,5 +1,7 @@
 import admin from "firebase-admin";
 import { loadEnv } from "../config/env.js";
+import fs from "fs";
+import path from "path";
 
 const globalCache = globalThis.__firebaseService || {
   service: null,
@@ -25,6 +27,24 @@ function tryParseServiceAccountJson(raw) {
   }
 }
 
+function tryLoadServiceAccountFromFile() {
+  // Do not read local files on Vercel. Use env vars there.
+  if (process.env.VERCEL) return null;
+
+  const relPath =
+    process.env.FIREBASE_SERVICE_ACCOUNT_PATH ||
+    "jobmatching-firebase-adminsdk-.json";
+
+  try {
+    const filePath = path.resolve(process.cwd(), relPath);
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function getFirebaseService() {
   if (globalCache.service) return globalCache.service;
 
@@ -43,6 +63,7 @@ export function getFirebaseService() {
 
     const serviceAccount =
       tryParseServiceAccountJson(env.FIREBASE_SERVICE_ACCOUNT_JSON) ||
+      tryLoadServiceAccountFromFile() ||
       (env.FIREBASE_PROJECT_ID &&
       env.FIREBASE_CLIENT_EMAIL &&
       env.FIREBASE_PRIVATE_KEY

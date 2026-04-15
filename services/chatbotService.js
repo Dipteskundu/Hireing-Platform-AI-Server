@@ -15,7 +15,8 @@ try {
 }
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
-const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+let genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+let warnedGeminiDisabled = false;
 
 const FALLBACK_MESSAGE =
   "Sorry, I do not have relevant information about that right now. I can help you with platform features, your data in this system, learning plans, and job matching guidance.";
@@ -196,7 +197,27 @@ Respond naturally and helpfully. When suggesting a page, say "visit [page name]"
       const result = await model.generateContent(prompt);
       answer = result.response.text().trim();
     } catch (apiError) {
-      console.warn("Gemini error — using fallback:", apiError.message);
+      const msg = String(apiError?.message || "");
+      const isInvalidKey =
+        /API key not valid/i.test(msg) ||
+        /API_KEY_INVALID/i.test(msg) ||
+        /api_key_invalid/i.test(msg);
+
+      if (isInvalidKey) {
+        genAI = null;
+        if (!warnedGeminiDisabled) {
+          warnedGeminiDisabled = true;
+          console.warn(
+            "Gemini is disabled: invalid GEMINI_API_KEY. Set a valid GEMINI_API_KEY in environment variables to enable AI responses.",
+          );
+        }
+      } else {
+        // Avoid spamming logs on transient Gemini errors.
+        if (!warnedGeminiDisabled && !process.env.VERCEL) {
+          warnedGeminiDisabled = true;
+          console.warn("Gemini error — using fallback:", msg);
+        }
+      }
       answer = buildFallback(intent, userContext, role, name);
     }
   }

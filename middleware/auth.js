@@ -1,6 +1,8 @@
 import { getFirebaseService } from "../services/firebaseService.js";
 import { getDB } from "../config/db.js";
 
+let warnedOfflineJwt = false;
+
 export const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -13,16 +15,32 @@ export const verifyToken = async (req, res, next) => {
     const firebaseService = getFirebaseService();
     let decodedToken;
     if (!firebaseService || !firebaseService.admin) {
-      console.warn("Using offline JWT decoder because Firebase Admin credentials are missing.");
+      const isProdRuntime =
+        process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL);
+
+      if (isProdRuntime) {
+        return res.status(500).json({
+          success: false,
+          message:
+            "Server configuration error: Firebase Admin credentials are missing. Configure FIREBASE_SERVICE_ACCOUNT_JSON in environment variables.",
+        });
+      }
+
+      if (!warnedOfflineJwt) {
+        warnedOfflineJwt = true;
+        console.warn(
+          "Using offline JWT decoder because Firebase Admin credentials are missing (dev only).",
+        );
+      }
       try {
         const payloadBase64 = token.split('.')[1];
         const payloadString = Buffer.from(payloadBase64, 'base64').toString('utf8');
         const parsed = JSON.parse(payloadString);
         decodedToken = { uid: parsed.user_id || parsed.uid, email: parsed.email };
       } catch (err) {
-        return res.status(500).json({
+        return res.status(401).json({
           success: false,
-          message: "Server configuration error: Firebase Admin is not configured and token fallback parsing failed."
+          message: "Unauthorized: Invalid Token",
         });
       }
     } else {

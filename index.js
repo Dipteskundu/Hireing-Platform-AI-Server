@@ -1,6 +1,6 @@
 
 
-import "dotenv/config";
+import "./config/dotenv.js";
 import app from "./api/index.js";
 import { loadEnv } from "./config/env.js";
 

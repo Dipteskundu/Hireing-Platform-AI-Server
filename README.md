@@ -342,6 +342,7 @@ This backend is Vercel-ready:
 
 Steps:
 1. Create a Vercel project and import `JobMatch-AI-Server/`.
+   - If Vercel shows `No Output Directory named "public" found`, clear the Project Settings **Output Directory** (leave it blank). This repo also includes an empty `public/` folder for compatibility.
 2. Add environment variables from `.env.example`.
 3. Deploy.
 

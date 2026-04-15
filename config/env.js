@@ -1,8 +1,6 @@
 // config/env.js
 // Centralized environment validation and normalization
 
-import "dotenv/config";
-
 function buildMongoUriFromPieces() {
   const user = process.env.DB_USER;
   const pass = process.env.DB_PASS;
