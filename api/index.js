@@ -48,9 +48,27 @@ const corsOrigins = env.CORS_ORIGIN
       .filter(Boolean)
   : null;
 
+const localhostOrigin = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
 app.use(
   cors({
-    origin: corsOrigins || "*",
+    origin(origin, callback) {
+      // Allow server-to-server or same-origin requests (no Origin header)
+      if (!origin) return callback(null, true);
+
+      // Local dev convenience: allow localhost / 127.0.0.1 on any port
+      if (!isProd && localhostOrigin.test(origin)) {
+        return callback(null, true);
+      }
+
+      // If no allowlist specified, allow all
+      if (!corsOrigins) return callback(null, true);
+
+      // Otherwise, enforce allowlist
+      if (corsOrigins.includes(origin)) return callback(null, true);
+
+      return callback(new Error("Not allowed by CORS"));
+    },
     credentials: false,
   }),
 );

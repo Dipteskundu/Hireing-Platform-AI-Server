@@ -1,142 +1,206 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getDB } from "../config/db.js";
 import { createRequire } from "module";
 
+import { classifyIntent, INTENTS } from "./classifier.service.js";
+import { getCandidateContext, getRecruiterContext, getLearningContext, getUserName } from "./context.service.js";
+import { sanitizeResponse } from "./sanitizer.service.js";
+import { getLinkForIntent } from "../utils/linkMapper.js";
+
 const _require = createRequire(import.meta.url);
-const systemKnowledge = _require("../config/systemKnowledge.json");
+let systemKnowledge = {};
+try {
+  systemKnowledge = _require("../config/systemKnowledge.json");
+} catch (_) {
+  // systemKnowledge.json is optional
+}
 
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
-// Normalizing input
-function normalizeInput(input) {
-  return String(input || "").trim().toLowerCase().replace(/[.,?!]/g, "");
+const FALLBACK_MESSAGE =
+  "Sorry, I do not have relevant information about that right now. I can help you with platform features, your data in this system, learning plans, and job matching guidance.";
+
+/**
+ * Build a personalized static fallback (used when Gemini is unavailable).
+ * @param {string} intent
+ * @param {object} userContext
+ * @param {string} role
+ * @param {string} name  - user's first name (e.g. "John")
+ */
+function buildFallback(intent, userContext, role, name) {
+  const hi = name && name !== "there" ? `${name}, ` : "";
+  const you = name && name !== "there" ? name : "you";
+
+  switch (intent) {
+    case INTENTS.USER_DATA_SUMMARY:
+      if (role === "recruiter" || role === "employer") {
+        return `${hi}you currently have ${userContext.activeJobsCount ?? 0} active job post(s) with a total of ${userContext.totalApplicants ?? 0} applicant(s).`;
+      }
+      return `${hi}you have submitted ${userContext.applicationsCount ?? 0} application(s), saved ${userContext.savedJobsCount ?? 0} job(s), and matched with ${userContext.matchedJobsCount ?? 0} job(s).`;
+
+    case INTENTS.APPLY_JOB:
+      return `${hi}I can guide you through the steps, but I cannot perform actions directly. Go to the Jobs page, find a role you like, and click the "Apply" button.`;
+
+    case INTENTS.CREATE_JOB:
+      return `${hi}I can guide you through the steps, but I cannot perform actions directly. Open your Dashboard, click "Post a Job", fill in the details, and submit.`;
+
+    case INTENTS.SCHEDULE_INTERVIEW:
+      return `${hi}I can guide you through the steps, but I cannot perform actions directly. Head to the Interviews section in your Dashboard, pick a candidate, and set a time.`;
+
+    case INTENTS.UPLOAD_RESUME:
+      return `${hi}I can guide you through the steps, but I cannot perform actions directly. Visit the Resume page, click "Upload Resume", and select your PDF.`;
+
+    case INTENTS.LEARNING_PLAN:
+      return `${hi}visit your Learning Plan page to see personalized skills and courses recommended for your target role (${userContext.recentTargetRole || "your field"}).`;
+
+    case INTENTS.SKILL_GAP:
+      return `${hi}your skill gap analysis compares your current skills to what jobs in your target role require. Visit the Skill Gap Analysis page to see the details.`;
+
+    case INTENTS.SKILL_TEST:
+      return `${hi}you can take skill assessments from the Skill Tests page to verify your abilities and improve your profile ranking.`;
+
+    case INTENTS.PLATFORM_HELP:
+      return `JobMatch helps candidates find and apply for jobs, manage learning plans, and take skill tests. Recruiters can post jobs, review applicants, and schedule interviews. Let me know what ${you} need help with!`;
+
+    case INTENTS.NEXT_STEPS:
+      return `${hi}here are your best next steps: complete your profile, verify your skills with a skill test, and browse matched jobs on the Jobs page.`;
+
+    case INTENTS.CANDIDATE_WORKFLOW:
+      return `${hi}after signing up, complete your profile, upload your resume, take a skill test, and then browse the Jobs page to apply for positions.`;
+
+    case INTENTS.RECRUITER_WORKFLOW:
+      return `${hi}post a job from your Dashboard, then review applicants under your job post, shortlist the best candidates, and schedule interviews.`;
+
+    case INTENTS.DASHBOARD:
+      return `${hi}use the top navigation bar or sidebar to access your Dashboard, Jobs, Applications, Profile, and Learning Plan.`;
+
+    case INTENTS.JOB_MATCHING:
+      return `${hi}your match score is calculated by comparing your profile skills to each job's requirements. Keeping your profile complete and up-to-date maximises your match percentage.`;
+
+    case INTENTS.PROFILE:
+      return `${hi}visit your Profile page to update your personal details, skills, job title, and resume.`;
+
+    case INTENTS.VIEW_APPLICATIONS:
+      return `${hi}you can view all your submitted applications from the My Applications section in your Dashboard.`;
+
+    case INTENTS.VIEW_APPLICANTS:
+      return `${hi}you can review all applicants for each of your job posts from the Applicants section in your Recruiter Dashboard.`;
+
+    case INTENTS.SAVE_JOB:
+      return `${hi}click the bookmark icon on any job card to save it. You can find all saved jobs in the Saved Jobs section.`;
+
+    case INTENTS.WHO_AM_I:
+      return name && name !== "there" 
+        ? `Your name is ${name}! I'm here to help you with your ${role} dashboard.`
+        : "I'm sorry, I don't have your specific name in my records right now, but I'm here to help you!";
+
+    case INTENTS.DELETE_JOB_EXPLAIN:
+      return `${hi}to delete a job post, go to "My Jobs" in your dashboard, find the job, and click the "Delete" icon. Note that this action cannot be undone.`;
+
+    case INTENTS.EDIT_JOB_EXPLAIN:
+      return `${hi}to edit a job post, go to "My Jobs", find the job you want to change, and click the "Edit" button to update its details.`;
+
+    case INTENTS.SHORTLIST_EXPLAIN:
+      return `${hi}you can shortlist candidates by viewing the applicants for a specific job post and clicking the "Shortlist" button on their profile card.`;
+
+    default:
+      return FALLBACK_MESSAGE;
+  }
 }
 
-// Intent Classification mapping (simple keyword based)
-function classifyIntent(normalizedInput) {
-  const input = normalizedInput;
-  
-  if (input.includes("apply") || input.includes("upload") || input.includes("save") || input.includes("create profile")) {
-    return "platform_help";
-  }
-  if (input.includes("after signup") || input.includes("what should i do")) {
-    return "candidate_workflow_help";
-  }
-  if (input.includes("post a job") || input.includes("review applicant") || input.includes("shortlist")) {
-    return "recruiter_workflow_help";
-  }
-  if (input.includes("my recent application") || input.includes("how many job") || input.includes("my matched") || input.includes("my saved") || input.includes("my profile complete") || input.includes("my active job") || input.includes("applicant do i have") || input.includes("missing")) {
-    return "user_data_summary";
-  }
-  if (input.includes("learning plan") || input.includes("skills should i improve") || input.includes("skill gap") || input.includes("courses")) {
-    return "learning_guidance";
-  }
-  if (input.includes("why is this job recommended") || input.includes("match score")) {
-    return "job_matching_explanation";
-  }
-  if (input.includes("where can i find") || input.includes("dashboard")) {
-    return "dashboard_navigation_help";
-  }
-  if (input.includes("next") || input.includes("improve")) {
-    return "safe_next_step_guidance";
-  }
-  
-  // If no specific match, we default to platform help or general, let Gemini decide mostly
-  return "general";
-}
-
-// Context Builders
-async function getCandidateContext(uid) {
-  const db = getDB();
-  const user = await db.collection("users").findOne({ firebaseUid: uid }, { projection: { displayName: 1, email: 1, skills: 1, title: 1 } });
-  const applications = await db.collection("applications").countDocuments({ firebaseUid: uid });
-  const savedJobs = await db.collection("saved_jobs").countDocuments({ firebaseUid: uid });
-  return {
-    role: "candidate",
-    profile: user,
-    applicationsCount: applications,
-    savedJobsCount: savedJobs
-  };
-}
-
-async function getRecruiterContext(uid) {
-  const db = getDB();
-  const user = await db.collection("users").findOne({ firebaseUid: uid }, { projection: { displayName: 1, email: 1, companyName: 1 } });
-  const companyJobs = await db.collection("find_jobs").find({ $or: [{ postedBy: uid }, { company: user?.companyName || user?.displayName }] }).toArray();
-  
-  let totalApplicants = 0;
-  for (const job of companyJobs) {
-    const apps = await db.collection("applications").countDocuments({ jobId: job._id });
-    totalApplicants += apps;
-  }
-  
-  return {
-    role: "recruiter",
-    profile: user,
-    activeJobsCount: companyJobs.length,
-    totalApplicants
-  };
-}
-
+/**
+ * Main chatbot entry point.
+ * Returns { answer: string, link: { label, path } | null }
+ */
 export async function askChatbot(uid, role, question) {
-  if (!genAI) throw new Error("Gemini API not configured.");
-  
-  const normalized = normalizeInput(question);
-  const intent = classifyIntent(normalized);
-  
+  const { intent, isActionRequest } = classifyIntent(question);
+
+  // Always fetch the user's name for personalization
+  const name = await getUserName(uid).catch(() => "there");
+
+  if (intent === INTENTS.OUT_OF_SCOPE) {
+    return { answer: FALLBACK_MESSAGE, link: null };
+  }
+
+  const needsActionPrefix =
+    isActionRequest ||
+    [INTENTS.APPLY_JOB, INTENTS.CREATE_JOB, INTENTS.SCHEDULE_INTERVIEW, INTENTS.UPLOAD_RESUME].includes(intent);
+
+  // Build context
   let userContext = {};
+  let docsContext = null;
+
   try {
-    if (role === "recruiter" || role === "employer") {
-      userContext = await getRecruiterContext(uid);
+    const isRecruiter = role === "recruiter" || role === "employer";
+    if (intent === INTENTS.USER_DATA_SUMMARY || intent === INTENTS.NEXT_STEPS) {
+      userContext = isRecruiter
+        ? await getRecruiterContext(uid)
+        : await getCandidateContext(uid);
+    } else if (
+      intent === INTENTS.LEARNING_PLAN ||
+      intent === INTENTS.SKILL_GAP ||
+      intent === INTENTS.JOB_MATCHING
+    ) {
+      userContext = await getLearningContext(uid);
+      docsContext = systemKnowledge;
     } else {
-      userContext = await getCandidateContext(uid);
+      docsContext = systemKnowledge;
+      userContext = { userRole: role };
     }
   } catch (err) {
-    console.error("Failed to build context:", err);
+    console.error("Context build error (using fallback):", err.message);
+    userContext = { userRole: role };
   }
 
-  // Build the prompt for Gemini
-  const prompt = `
-You are the JobMatch AI Assistant, a helpful, read-only AI for a hiring platform.
-Your ONLY job is to help the user navigate the platform, explain features, provide guidance on hiring/applying, and read their data.
+  const link = getLinkForIntent(intent);
+
+  let answer = "";
+
+  if (!genAI) {
+    answer = buildFallback(intent, userContext, role, name);
+  } else {
+    const actionInstruction = needsActionPrefix
+      ? `IMPORTANT: Start your response with "I can guide you through the steps, but I cannot perform actions directly." then provide clear steps.\n`
+      : "";
+
+    const nameInstruction =
+      name && name !== "there"
+        ? `USERNAME: The user's first name is "${name}". IF they ask who they are or what their name is, tell them directly. Otherwise, address them by name naturally — in the greeting or data summary. Do NOT repeat the name more than once per response.`
+        : `USERNAME: The user's name is unknown. If they ask for their name, tell them you don't have it in your records yet. Use friendly but impersonal language otherwise.`;
+
+    const prompt = `You are the JobMatch AI Assistant — a helpful, friendly, read-only support assistant for a job-matching platform.
 
 SECURITY RULES:
-1. You CANNOT perform actions (e.g., you cannot apply to jobs, update profiles, or post jobs). If asked to do so, politely decline and tell the user how to do it in the UI.
-2. You only have READ access to the user's data provided below. Do not invent data.
-3. If the user asks something completely outside the scope of a hiring platform, reply EXACTLY with:
-"Sorry, I do not have relevant information about that right now. I can help you with platform features, your data in this system, learning plans, and job matching guidance."
-4. Never say "I updated your data", "I deleted your application", or "I posted the job".
+- You CANNOT perform actions (apply to jobs, update profiles, post jobs, delete data). If asked, start with: "I can guide you through the steps, but I cannot perform actions directly."
+- Use ONLY the user data and platform knowledge provided below. Never invent facts.
+- If the question is completely outside the scope of a job platform, reply EXACTLY: "${FALLBACK_MESSAGE}"
+- Never say "I updated", "I deleted", "I applied", "I posted", "I created", "I scheduled".
+- Keep replies concise, friendly, and in plain paragraphs (no markdown headers).
 
----
-USER DATA CONTEXT:
+${nameInstruction}
+${actionInstruction}
+USER ROLE: ${role}
+
+USER CONTEXT (read-only snapshot of this user's data):
 ${JSON.stringify(userContext, null, 2)}
 
-PLATFORM KNOWLEDGE BASE:
-${JSON.stringify(systemKnowledge, null, 2)}
+PLATFORM KNOWLEDGE:
+${JSON.stringify(docsContext, null, 2)}
 
----
 USER QUESTION: "${question}"
 
-Provide a clean, conversational, and direct answer. Do not use Markdown headers, just simple paragraphs.
-`;
+Respond naturally and helpfully. When suggesting a page, say "visit [page name]" — the UI adds navigation links automatically.`;
 
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-  const result = await model.generateContent(prompt);
-  let responseText = result.response.text().trim();
-
-  // Sanitize response
-  const forbiddenPhrases = [
-    "i updated your", "i deleted your", "i posted the", "i have applied", "i created"
-  ];
-  
-  const lowerResponse = responseText.toLowerCase();
-  for (const phrase of forbiddenPhrases) {
-    if (lowerResponse.includes(phrase)) {
-      responseText = "I cannot perform actions directly, but I can guide you on how to do it in the platform.";
-      break;
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const result = await model.generateContent(prompt);
+      answer = result.response.text().trim();
+    } catch (apiError) {
+      console.warn("Gemini error — using fallback:", apiError.message);
+      answer = buildFallback(intent, userContext, role, name);
     }
   }
 
-  return responseText;
+  answer = sanitizeResponse(answer);
+  return { answer, link };
 }
