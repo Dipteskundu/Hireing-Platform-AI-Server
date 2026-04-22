@@ -5,6 +5,7 @@ import { classifyIntent, INTENTS } from "./classifier.service.js";
 import { getCandidateContext, getRecruiterContext, getLearningContext, getUserName } from "./context.service.js";
 import { sanitizeResponse } from "./sanitizer.service.js";
 import { getLinkForIntent } from "../utils/linkMapper.js";
+import { normalizeInput } from "../utils/normalizeInput.js";
 
 const _require = createRequire(import.meta.url);
 let systemKnowledge = {};
@@ -20,6 +21,76 @@ let warnedGeminiDisabled = false;
 
 const FALLBACK_MESSAGE =
   "Sorry, I do not have relevant information about that right now. I can help you with platform features, your data in this system, learning plans, and job matching guidance.";
+
+function isRecruiterRole(role) {
+  return role === "recruiter" || role === "employer";
+}
+
+function roleLabel(role) {
+  return isRecruiterRole(role) ? "Recruiter" : "Candidate";
+}
+
+function buildRoleMismatchMessage(loggedInRole) {
+  const label = roleLabel(loggedInRole);
+  if (isRecruiterRole(loggedInRole)) {
+    return `You are logged in as a ${label}, and that question looks like a Candidate feature, so it isn’t related to your ${label} profile. How can I help you with ${label} features (job posts, applicants, interviews) for your logged-in role?`;
+  }
+  return `You are logged in as a ${label}, and that question looks like a Recruiter feature, so it isn’t related to your ${label} profile. How can I help you with ${label} features (applications, resume, skill tests, skill gap, learning plan) for your logged-in role?`;
+}
+
+/**
+ * Best-effort role detection based on the question text + intent.
+ * Returns "candidate" | "recruiter" | null (unknown/shared).
+ */
+function detectRequestedRole(question, intent) {
+  const normalized = normalizeInput(question);
+
+  // Explicit role words
+  if (/\b(recruiter|employer|hiring|hire|job post|job posting|post a job|applicants?)\b/i.test(normalized)) {
+    return "recruiter";
+  }
+  if (/\b(candidate|my applications?|saved jobs?|resume|skill gap|learning plan|skill test)\b/i.test(normalized)) {
+    return "candidate";
+  }
+
+  // Intent-based defaults
+  const recruiterIntents = new Set([
+    INTENTS.CREATE_JOB,
+    INTENTS.VIEW_APPLICANTS,
+    INTENTS.SCHEDULE_INTERVIEW,
+    INTENTS.RECRUITER_WORKFLOW,
+    INTENTS.DELETE_JOB_EXPLAIN,
+    INTENTS.EDIT_JOB_EXPLAIN,
+    INTENTS.SHORTLIST_EXPLAIN,
+  ]);
+
+  const candidateIntents = new Set([
+    INTENTS.APPLY_JOB,
+    INTENTS.SAVE_JOB,
+    INTENTS.VIEW_APPLICATIONS,
+    INTENTS.LEARNING_PLAN,
+    INTENTS.SKILL_GAP,
+    INTENTS.SKILL_TEST,
+    INTENTS.UPLOAD_RESUME,
+    INTENTS.CANDIDATE_WORKFLOW,
+  ]);
+
+  if (recruiterIntents.has(intent)) return "recruiter";
+  if (candidateIntents.has(intent)) return "candidate";
+
+  // Ambiguous intents: try a tiny heuristic
+  if (intent === INTENTS.USER_DATA_SUMMARY) {
+    if (/\b(applicants?|active job posts?|job performance|job post)\b/i.test(normalized)) return "recruiter";
+    if (/\b(applications?|matched jobs?|saved jobs?)\b/i.test(normalized)) return "candidate";
+  }
+
+  if (intent === INTENTS.JOB_MATCHING) {
+    if (/\b(best candidates?|top matched candidates?|ranking)\b/i.test(normalized)) return "recruiter";
+    return "candidate";
+  }
+
+  return null;
+}
 
 /**
  * Build a personalized static fallback (used when Gemini is unavailable).
@@ -116,7 +187,17 @@ function buildFallback(intent, userContext, role, name) {
 export async function askChatbot(uid, role, question) {
   const { intent, isActionRequest } = classifyIntent(question);
 
-  // Always fetch the user's name for personalization
+  // Enforce role-based access in the chatbot layer (read-only): if user asks about the other role,
+  // respond with a role-aware guidance message instead of leaking cross-role features.
+  const requestedRole = detectRequestedRole(question, intent);
+  if (requestedRole) {
+    const loggedInRole = isRecruiterRole(role) ? "recruiter" : "candidate";
+    if (requestedRole !== loggedInRole) {
+      return { answer: buildRoleMismatchMessage(role), link: null };
+    }
+  }
+
+  // Always fetch the user's name for personalization (after role enforcement)
   const name = await getUserName(uid).catch(() => "there");
 
   if (intent === INTENTS.OUT_OF_SCOPE) {
